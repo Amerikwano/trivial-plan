@@ -157,6 +157,8 @@
   .btn.ghost:hover { color: var(--accent); border-color: var(--accent); }
   .cheer { text-align: center; margin-top: 18px; color: var(--accent); min-height: 1.4em; }
 
+  .version { text-align: center; color: var(--muted); font-size: 0.7rem; margin-top: 28px; opacity: .7; }
+
   /* 추천을 다 끝냈을 때 뜨는 확인창 */
   dialog.more {
     border: none;
@@ -268,6 +270,7 @@
 
     <button class="btn ghost" id="reroll">🎲 안 한 추천은 다른 걸로 바꾸기</button>
     <div class="cheer" id="cheer"></div>
+    <button class="btn ghost" id="moreBtn" type="button" hidden>🎁 플랜 하나 더 받기</button>
 
     <details class="settings" id="settings">
       <summary>🔔 알림 설정</summary>
@@ -316,6 +319,8 @@
     <div class="legend">칸의 숫자는 그날의 계획 개수예요. 초록색 칸은 전부 해낸 날! 날짜를 누르면 자세히 볼 수 있어요.</div>
     <div class="day-detail" id="dayDetail"></div>
   </section>
+
+  <div class="version" id="version"></div>
 </main>
 
 <dialog class="more" id="moreDialog">
@@ -346,6 +351,8 @@ const todayStr = () => dayString(new Date());
 const CATS = window.PLAN_POOL || [];
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
+// 고친 뒤 올릴 때 sw.js의 CACHE 버전과 같이 올려주세요. 앱 맨 아래에 보여요.
+const APP_VERSION = "v5";
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -657,6 +664,10 @@ function render(list) {
   $("count").textContent = `${done} / ${total} 완료`;
   $("bar").style.width = total ? `${(done / total) * 100}%` : "0";
   $("cheer").textContent = total && done === total ? "오늘도 해냈어요! 대단해요 🎉" : "";
+
+  // 추천을 전부 끝냈으면 '하나 더 받기' 버튼도 보여줘요 (확인창을 닫았을 때를 위해)
+  const suggested = tasks.filter((t) => t.source === "suggested");
+  $("moreBtn").hidden = !(suggested.length && suggested.every((t) => t.done));
 }
 
 function showDateHeader() {
@@ -711,6 +722,7 @@ $("moreYes").onclick = async () => {
   await giveOneMore();
 };
 $("moreNo").onclick = () => $("moreDialog").close();
+$("moreBtn").onclick = giveOneMore;
 
 /* ---------- 알림 ---------- */
 function notifSupported() { return "Notification" in window; }
@@ -935,6 +947,7 @@ document.querySelectorAll(".tab").forEach((btn) => {
   try { settings = await api("/api/settings"); } catch (_) {}
   $("morningTime").value = settings.morning_time;
   updateNotifStatus();
+  $("version").textContent = APP_VERSION;
   try { await loadToday(); } catch (err) { alert(err.message); }
   tick();
   setInterval(tick, 15000);
