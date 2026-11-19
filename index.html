@@ -292,6 +292,7 @@
   </section>
 </main>
 
+<script src="plans.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const pad = (n) => String(n).padStart(2, "0");
@@ -305,16 +306,9 @@ const todayStr = () => dayString(new Date());
    예전에는 서버(MySQL)에 저장했지만, 이제는 이 폰의 브라우저 저장소(localStorage)에 저장해요.
    아래 api()는 예전 서버 주소를 그대로 받아서 폰 안에서 처리해요. */
 
-// 정말 쉽고 하찮은 플랜 모음 (마음대로 추가/수정하세요)
-const POOL = [
-  "물 한 잔 마시기", "옷 갈아입기", "엄마랑 통화하기", "창문 열고 환기하기",
-  "기지개 쭉 켜기", "이불 정리하기", "세수하고 양치하기", "하늘 한 번 올려다보기",
-  "좋아하는 노래 한 곡 듣기", "책상 위 물건 하나 치우기", "친구에게 안부 문자 보내기",
-  "스트레칭 1분 하기", "과일이나 간식 하나 먹기", "심호흡 세 번 하기",
-  "오늘 있었던 일 한 줄 적기", "화분이나 식물 쳐다보기", "5분만 산책하기",
-  "따뜻한 차 한 잔 마시기", "휴대폰 사진 하나 정리하기", "나한테 잘했다고 말해주기",
-  "양말 짝 맞춰 정리하기", "햇빛 쬐기", "가족한테 이모티콘 하나 보내기", "일찍 눕기",
-];
+// 추천 플랜 목록은 plans.js에 있어요 (묶음별로 나뉘어 있어요)
+const CATS = window.PLAN_POOL || [];
+const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -346,17 +340,56 @@ function saveStore(s) {
   }
 }
 
-function pick(exclude, n) {
-  const choices = POOL.filter((t) => !exclude.has(t));
-  for (let i = choices.length - 1; i > 0; i--) {
+function shuffled(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [choices[i], choices[j]] = [choices[j], choices[i]];
+    [a[i], a[j]] = [a[j], a[i]];
   }
-  return choices.slice(0, Math.min(n, choices.length));
+  return a;
 }
 
-function insertTask(s, day, text, source, remindAt = null) {
-  s.tasks.push({ id: s.nextId++, day, text, done: false, source, remind_at: remindAt });
+// 한 묶음에서 이 폰에 아직 안 나온 플랜 하나를 골라요.
+// 묶음을 다 쓰면 그 묶음만 처음부터 다시 섞어요.
+function drawFrom(s, cat, exclude) {
+  s.used ||= {};
+  const used = new Set(s.used[cat.id] || []);
+  let choices = cat.items.filter((t) => !used.has(t) && !exclude.has(t));
+  if (!choices.length) {
+    s.used[cat.id] = [];
+    choices = cat.items.filter((t) => !exclude.has(t));
+  }
+  if (!choices.length) return null;
+  const text = choices[Math.floor(Math.random() * choices.length)];
+  (s.used[cat.id] ||= []).push(text);
+  return text;
+}
+
+// n개를 서로 다른 묶음에서 골라요. avoidCats 묶음은 다른 묶음이 모자랄 때만 써요.
+// 아직 남은 플랜이 많은 묶음부터 골라서, 모든 묶음이 비슷한 속도로 줄어들게 해요.
+function suggest(s, n, exclude, avoidCats = new Set()) {
+  const left = (c) => c.items.length - ((s.used && s.used[c.id]) || []).length;
+  const byLeft = (cats) => shuffled(cats).sort((a, b) => left(b) - left(a));
+  const order = [
+    ...byLeft(CATS.filter((c) => !avoidCats.has(c.id))),
+    ...byLeft(CATS.filter((c) => avoidCats.has(c.id))),
+  ];
+  const picks = [];
+  for (let round = 0; picks.length < n && round < 3; round++) {
+    for (const cat of order) {
+      if (picks.length >= n) break;
+      const text = drawFrom(s, cat, exclude);
+      if (text) {
+        exclude.add(text);
+        picks.push({ text, cat: cat.id });
+      }
+    }
+  }
+  return picks;
+}
+
+function insertTask(s, day, text, source, remindAt = null, cat = null) {
+  s.tasks.push({ id: s.nextId++, day, text, done: false, source, remind_at: remindAt, cat });
 }
 
 // 오늘이 처음이면 추천 플랜 3개를 만들어요 (할 일을 전부 지워도 다시 생기지 않아요)
@@ -364,13 +397,19 @@ function ensureToday(s) {
   const today = todayStr();
   if (!s.days.includes(today)) {
     s.days.push(today);
-    pick(new Set(), DAILY_COUNT).forEach((text) => insertTask(s, today, text, "suggested"));
+    suggest(s, DAILY_COUNT, new Set()).forEach((p) => insertTask(s, today, p.text, "suggested", null, p.cat));
   }
   return today;
 }
 
 const tasksOf = (s, day) =>
-  s.tasks.filter((t) => t.day === day).map(({ id, text, done, source, remind_at }) => ({ id, text, done, source, remind_at }));
+  s.tasks.filter((t) => t.day === day).map(({ id, text, done, source, remind_at, cat }) => ({ id, text, done, source, remind_at, cat: cat || null }));
+
+// 추천 태그에 묶음 이름을 보여줘요 (예: "🔍 호기심")
+function suggestLabel(t) {
+  const c = t.cat && CAT_BY_ID[t.cat];
+  return c ? `${c.emoji} ${c.name}` : "추천";
+}
 
 async function api(path, method = "GET", body) {
   const s = loadStore();
@@ -409,10 +448,13 @@ async function api(path, method = "GET", body) {
   if (route === "/api/reroll" && method === "POST") {
     // 아직 안 한 추천 항목만 새로운 걸로 바꿔줘요
     const today = ensureToday(s);
-    const used = new Set(s.tasks.filter((t) => t.day === today).map((t) => t.text));
+    const todays = s.tasks.filter((t) => t.day === today);
+    const exclude = new Set(todays.map((t) => t.text));
+    const keptCats = new Set(todays.filter((t) => t.source === "suggested" && t.done && t.cat).map((t) => t.cat));
     const before = s.tasks.length;
     s.tasks = s.tasks.filter((t) => !(t.day === today && t.source === "suggested" && !t.done));
-    pick(used, before - s.tasks.length).forEach((text) => insertTask(s, today, text, "suggested"));
+    suggest(s, before - s.tasks.length, exclude, keptCats)
+      .forEach((p) => insertTask(s, today, p.text, "suggested", null, p.cat));
     saveStore(s);
     return tasksOf(s, today);
   }
@@ -536,7 +578,7 @@ function render(list) {
     if (t.source === "suggested") {
       const tag = document.createElement("span");
       tag.className = "tag";
-      tag.textContent = "추천";
+      tag.textContent = suggestLabel(t);
       li.append(tag);
     } else if (t.remind_at) {
       const tag = document.createElement("span");
@@ -774,7 +816,7 @@ async function showDay(ds) {
       if (t.source === "suggested") {
         const tag = document.createElement("span");
         tag.className = "tag";
-        tag.textContent = "추천";
+        tag.textContent = suggestLabel(t);
         li.append(tag);
       } else if (t.remind_at) {
         const tag = document.createElement("span");
