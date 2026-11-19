@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>오늘의 하찮은 플랜</title>
+<!-- 홈 화면에 추가하면 주소창 없이 앱처럼 열리게 해요 -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="하찮은 플랜">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#fdf6ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1f1b17" media="(prefers-color-scheme: dark)">
+<style>
+  :root {
+    --bg: #fdf6ec;
+    --card: #ffffff;
+    --ink: #3b3228;
+    --muted: #9a8f82;
+    --accent: #f08a5d;
+    --accent-soft: #fde3d3;
+    --done: #b9c9a8;
+    --done-soft: #e6eedd;
+    --line: #efe4d4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1f1b17;
+      --card: #2a2520;
+      --ink: #f1e8dc;
+      --muted: #988c7d;
+      --accent: #f19a72;
+      --accent-soft: #3d2f26;
+      --done: #7f9170;
+      --done-soft: #2f3a2a;
+      --line: #3a332c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  main { width: 100%; max-width: 460px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .date { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; }
+
+  /* 탭 */
+  .tabs { display: flex; gap: 6px; margin-bottom: 20px; }
+  .tab {
+    flex: 1;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* 오늘 */
+  .progress { background: var(--accent-soft); border-radius: 999px; height: 10px; overflow: hidden; margin-bottom: 6px; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
+  .count { color: var(--muted); font-size: 0.85rem; text-align: right; margin-bottom: 16px; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  li {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  li button.check {
+    flex: none;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 0;
+  }
+  li.done button.check { background: var(--done); border-color: var(--done); }
+  li .text { flex: 1; word-break: break-word; }
+  li.done .text { color: var(--muted); text-decoration: line-through; }
+  .tag {
+    font-size: 0.7rem;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 999px;
+    padding: 2px 8px;
+    flex: none;
+    white-space: nowrap;
+  }
+  li button.del {
+    flex: none;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0 4px;
+  }
+  li button.del:hover { color: var(--accent); }
+  li.readonly .mark { flex: none; width: 22px; text-align: center; color: var(--done); font-weight: bold; }
+  li.readonly:not(.done) .mark { color: var(--muted); }
+
+  form { margin-top: 18px; display: grid; gap: 8px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  input[type=text], input[type=time] {
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    font-size: 1rem;
+    outline: none;
+    font-family: inherit;
+  }
+  input[type=text] { flex: 1; width: 100%; }
+  input:focus { border-color: var(--accent); }
+  .row label { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+  .row .spacer { flex: 1; }
+  .btn {
+    border: none;
+    border-radius: 12px;
+    padding: 12px 18px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .btn.small { padding: 8px 12px; font-size: 0.85rem; }
+  .btn.ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px dashed var(--line);
+    width: 100%;
+    margin-top: 12px;
+    font-size: 0.9rem;
+  }
+  .btn.ghost:hover { color: var(--accent); border-color: var(--accent); }
+  .cheer { text-align: center; margin-top: 18px; color: var(--accent); min-height: 1.4em; }
+
+  /* 알림 설정 */
+  details.settings {
+    margin-top: 20px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 14px;
+  }
+  details.settings summary { cursor: pointer; font-size: 0.95rem; }
+  .settings .body { display: grid; gap: 12px; margin-top: 14px; }
+  .note { color: var(--muted); font-size: 0.8rem; line-height: 1.5; }
+  .status { font-size: 0.85rem; }
+  .status.ok { color: var(--done); }
+  .status.bad { color: var(--accent); }
+
+  /* 캘린더 */
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .cal-head .title { font-size: 1.1rem; font-weight: 600; }
+  .cal-head button {
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    border-radius: 10px;
+    width: 38px; height: 38px;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .dow { text-align: center; font-size: 0.75rem; color: var(--muted); padding: 4px 0; }
+  .cell {
+    aspect-ratio: 1 / 1;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .cell.empty { visibility: hidden; }
+  .cell .d { font-size: 0.75rem; color: var(--muted); }
+  .cell .n { font-size: 1.15rem; font-weight: 700; color: var(--accent); line-height: 1; margin-bottom: 4px; }
+  .cell .n.zero { color: var(--line); font-weight: 400; }
+  .cell.all { background: var(--done-soft); border-color: var(--done); }
+  .cell.all .n { color: var(--done); }
+  .cell.today { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cell.selected { border-color: var(--accent); background: var(--accent-soft); }
+  .legend { color: var(--muted); font-size: 0.8rem; margin: 12px 0 18px; line-height: 1.5; }
+  .day-detail h2 { font-size: 1rem; margin: 0 0 10px; }
+  .day-detail .empty-msg { color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>오늘의 하찮은 플랜 🌱</h1>
+  <div class="date" id="date"></div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="today">오늘</button>
+    <button class="tab" data-tab="cal">캘린더</button>
+  </div>
+
+  <!-- 오늘 -->
+  <section class="view active" id="view-today">
+    <div class="progress"><div id="bar"></div></div>
+    <div class="count" id="count"></div>
+
+    <ul id="list"></ul>
+
+    <form id="form">
+      <input type="text" id="input" placeholder="나만의 할 일 추가하기" maxlength="100" autocomplete="off">
+      <div class="row">
+        <label for="remindAt">⏰ 알림 시간</label>
+        <input type="time" id="remindAt">
+        <span class="spacer"></span>
+        <button class="btn" type="submit">추가</button>
+      </div>
+    </form>
+
+    <button class="btn ghost" id="reroll">🎲 안 한 추천은 다른 걸로 바꾸기</button>
+    <div class="cheer" id="cheer"></div>
+
+    <details class="settings" id="settings">
+      <summary>🔔 알림 설정</summary>
+      <div class="body">
+        <div class="row">
+          <button class="btn small" id="enableNotif" type="button">알림 허용하기</button>
+          <span class="status" id="notifStatus"></span>
+        </div>
+        <div class="row">
+          <label for="morningTime">☀️ 추천 플랜 아침 알림</label>
+          <input type="time" id="morningTime" value="08:00">
+        </div>
+        <div class="note">
+          추천 플랜은 위에서 정한 아침 시간에, 직접 추가한 할 일은 각자 정한 알림 시간에 알려드려요.
+          알림은 이 앱이 열려 있는 동안 울려요 (앱을 완전히 닫으면 울리지 않아요).
+          아이폰은 홈 화면에 추가한 앱에서만 알림을 켤 수 있어요.
+        </div>
+      </div>
+    </details>
+
+    <details class="settings" id="backup">
+      <summary>💾 기록 백업</summary>
+      <div class="body">
+        <div class="note">
+          기록은 이 폰 안에만 저장돼요. 폰을 바꾸거나 앱을 지우기 전에 백업 파일을 내보내 두고,
+          새 폰에서 가져오기를 누르면 그대로 옮겨져요.
+        </div>
+        <div class="row">
+          <button class="btn small" id="exportBtn" type="button">백업 내보내기</button>
+          <button class="btn small" id="importBtn" type="button">백업 가져오기</button>
+          <input type="file" id="importFile" accept="application/json,.json" hidden>
+        </div>
+        <span class="status" id="backupStatus"></span>
+      </div>
+    </details>
+  </section>
+
+  <!-- 캘린더 -->
+  <section class="view" id="view-cal">
+    <div class="cal-head">
+      <button id="prevMonth" aria-label="이전 달">‹</button>
+      <div class="title" id="calTitle"></div>
+      <button id="nextMonth" aria-label="다음 달">›</button>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="legend">칸의 숫자는 그날의 계획 개수예요. 초록색 칸은 전부 해낸 날! 날짜를 누르면 자세히 볼 수 있어요.</div>
+    <div class="day-detail" id="dayDetail"></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const pad = (n) => String(n).padStart(2, "0");
+
+function dayString(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+const todayStr = () => dayString(new Date());
+
+/* ---------- 폰 안 저장소 ----------
+   예전에는 서버(MySQL)에 저장했지만, 이제는 이 폰의 브라우저 저장소(localStorage)에 저장해요.
+   아래 api()는 예전 서버 주소를 그대로 받아서 폰 안에서 처리해요. */
+
+// 정말 쉽고 하찮은 플랜 모음 (마음대로 추가/수정하세요)
+const POOL = [
+  "물 한 잔 마시기", "옷 갈아입기", "엄마랑 통화하기", "창문 열고 환기하기",
+  "기지개 쭉 켜기", "이불 정리하기", "세수하고 양치하기", "하늘 한 번 올려다보기",
+  "좋아하는 노래 한 곡 듣기", "책상 위 물건 하나 치우기", "친구에게 안부 문자 보내기",
+  "스트레칭 1분 하기", "과일이나 간식 하나 먹기", "심호흡 세 번 하기",
+  "오늘 있었던 일 한 줄 적기", "화분이나 식물 쳐다보기", "5분만 산책하기",
+  "따뜻한 차 한 잔 마시기", "휴대폰 사진 하나 정리하기", "나한테 잘했다고 말해주기",
+  "양말 짝 맞춰 정리하기", "햇빛 쬐기", "가족한테 이모티콘 하나 보내기", "일찍 눕기",
+];
+const DAILY_COUNT = 3;
+const STORE_KEY = "trivial-plan-v1";
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function emptyStore() {
+  return { version: 1, days: [], tasks: [], nextId: 1, settings: { morning_time: "08:00" } };
+}
+
+function validStore(s) {
+  return s && Array.isArray(s.days) && Array.isArray(s.tasks) &&
+    Number.isInteger(s.nextId) && s.settings && typeof s.settings === "object";
+}
+
+function loadStore() {
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (validStore(s)) return s;
+  } catch (_) {}
+  return emptyStore();
+}
+
+function saveStore(s) {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(s));
+  } catch (_) {
+    throw new Error("저장하지 못했어요. 브라우저의 개인정보 보호 모드라면 일반 모드로 열어주세요");
+  }
+}
+
+function pick(exclude, n) {
+  const choices = POOL.filter((t) => !exclude.has(t));
+  for (let i = choices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [choices[i], choices[j]] = [choices[j], choices[i]];
+  }
+  return choices.slice(0, Math.min(n, choices.length));
+}
+
+function insertTask(s, day, text, source, remindAt = null) {
+  s.tasks.push({ id: s.nextId++, day, text, done: false, source, remind_at: remindAt });
+}
+
+// 오늘이 처음이면 추천 플랜 3개를 만들어요 (할 일을 전부 지워도 다시 생기지 않아요)
+function ensureToday(s) {
+  const today = todayStr();
+  if (!s.days.includes(today)) {
+    s.days.push(today);
+    pick(new Set(), DAILY_COUNT).forEach((text) => insertTask(s, today, text, "suggested"));
+  }
+  return today;
+}
+
+const tasksOf = (s, day) =>
+  s.tasks.filter((t) => t.day === day).map(({ id, text, done, source, remind_at }) => ({ id, text, done, source, remind_at }));
+
+async function api(path, method = "GET", body) {
+  const s = loadStore();
+  const [route, query = ""] = path.split("?");
+  let m;
+
+  if (route === "/api/tasks" && method === "GET") {
+    const today = ensureToday(s);
+    saveStore(s);
+    return tasksOf(s, today);
+  }
+  if (route === "/api/tasks" && method === "POST") {
+    const text = ((body && body.text) || "").trim();
+    if (!text) throw new Error("내용을 입력해주세요");
+    const remindAt = ((body && body.remind_at) || "").trim() || null;
+    if (remindAt && !TIME_RE.test(remindAt)) throw new Error("알림 시간 형식이 올바르지 않아요");
+    const today = ensureToday(s);
+    insertTask(s, today, text.slice(0, 100), "custom", remindAt);
+    saveStore(s);
+    return tasksOf(s, today);
+  }
+  if ((m = route.match(/^\/api\/tasks\/(\d+)\/toggle$/)) && method === "POST") {
+    const today = ensureToday(s);
+    const t = s.tasks.find((x) => x.id === Number(m[1]) && x.day === today);
+    if (!t) throw new Error("없는 할 일이에요");
+    t.done = !t.done;
+    saveStore(s);
+    return tasksOf(s, today);
+  }
+  if ((m = route.match(/^\/api\/tasks\/(\d+)$/)) && method === "DELETE") {
+    const today = ensureToday(s);
+    s.tasks = s.tasks.filter((x) => !(x.id === Number(m[1]) && x.day === today));
+    saveStore(s);
+    return tasksOf(s, today);
+  }
+  if (route === "/api/reroll" && method === "POST") {
+    // 아직 안 한 추천 항목만 새로운 걸로 바꿔줘요
+    const today = ensureToday(s);
+    const used = new Set(s.tasks.filter((t) => t.day === today).map((t) => t.text));
+    const before = s.tasks.length;
+    s.tasks = s.tasks.filter((t) => !(t.day === today && t.source === "suggested" && !t.done));
+    pick(used, before - s.tasks.length).forEach((text) => insertTask(s, today, text, "suggested"));
+    saveStore(s);
+    return tasksOf(s, today);
+  }
+  if (route === "/api/history" && method === "GET") {
+    const month = new URLSearchParams(query).get("month") || todayStr().slice(0, 7);
+    if (!MONTH_RE.test(month)) throw new Error("month는 YYYY-MM 형식이어야 해요");
+    const out = {};
+    s.tasks.forEach((t) => {
+      if (!t.day.startsWith(month + "-")) return;
+      const e = (out[t.day] ||= { total: 0, done: 0 });
+      e.total++;
+      if (t.done) e.done++;
+    });
+    return out;
+  }
+  if ((m = route.match(/^\/api\/day\/(.+)$/)) && method === "GET") {
+    if (!DATE_RE.test(m[1])) throw new Error("날짜 형식이 올바르지 않아요");
+    return tasksOf(s, m[1]);
+  }
+  if (route === "/api/settings" && method === "GET") {
+    return { morning_time: "08:00", ...s.settings };
+  }
+  if (route === "/api/settings" && method === "POST") {
+    const morning = ((body && body.morning_time) || "").trim();
+    if (!TIME_RE.test(morning)) throw new Error("시간 형식이 올바르지 않아요");
+    s.settings.morning_time = morning;
+    saveStore(s);
+    return { morning_time: "08:00", ...s.settings };
+  }
+  throw new Error("알 수 없는 요청이에요");
+}
+
+/* ---------- 백업 ---------- */
+function setBackupStatus(msg, ok) {
+  const el = $("backupStatus");
+  el.textContent = msg;
+  el.className = "status " + (ok ? "ok" : "bad");
+}
+
+$("exportBtn").onclick = async () => {
+  const data = JSON.stringify(loadStore(), null, 2);
+  const name = `하찮은플랜-백업-${todayStr()}.json`;
+  const file = new File([data], name, { type: "application/json" });
+  try {
+    // 폰에서는 공유 창을 띄워 파일 앱·메일·메신저 등에 저장할 수 있게 해요
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: "하찮은 플랜 백업" });
+      setBackupStatus("백업 파일을 보냈어요 ✓", true);
+      return;
+    }
+  } catch (err) {
+    if (err && err.name === "AbortError") return;
+  }
+  const url = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setBackupStatus("백업 파일을 저장했어요 ✓", true);
+};
+
+$("importBtn").onclick = () => $("importFile").click();
+
+$("importFile").onchange = async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  let data;
+  try {
+    data = JSON.parse(await file.text());
+  } catch (_) {
+    setBackupStatus("백업 파일을 읽지 못했어요", false);
+    return;
+  }
+  if (!validStore(data)) {
+    setBackupStatus("하찮은 플랜 백업 파일이 아니에요", false);
+    return;
+  }
+  if (!confirm("지금 폰에 있는 기록을 백업 파일 내용으로 바꿀까요? 지금 기록은 사라져요.")) return;
+  try {
+    saveStore(data);
+  } catch (err) {
+    setBackupStatus(err.message, false);
+    return;
+  }
+  settings = await api("/api/settings");
+  $("morningTime").value = settings.morning_time;
+  selectedDay = null;
+  await loadToday();
+  setBackupStatus(`가져왔어요 ✓ (기록 ${data.tasks.length}개)`, true);
+};
+
+/* ---------- 상태 ---------- */
+let currentDay = todayStr();
+let tasks = [];
+let settings = { morning_time: "08:00" };
+
+/* ---------- 오늘 탭 ---------- */
+function render(list) {
+  tasks = list;
+  const ul = $("list");
+  ul.innerHTML = "";
+  tasks.forEach((t) => {
+    const li = document.createElement("li");
+    if (t.done) li.classList.add("done");
+
+    const check = document.createElement("button");
+    check.className = "check";
+    check.textContent = t.done ? "✓" : "";
+    check.setAttribute("aria-label", "완료 토글");
+    check.onclick = async () => render(await api(`/api/tasks/${t.id}/toggle`, "POST"));
+
+    const text = document.createElement("span");
+    text.className = "text";
+    text.textContent = t.text;
+    li.append(check, text);
+
+    if (t.source === "suggested") {
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = "추천";
+      li.append(tag);
+    } else if (t.remind_at) {
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = `⏰ ${t.remind_at}`;
+      li.append(tag);
+    }
+
+    const del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "×";
+    del.setAttribute("aria-label", "삭제");
+    del.onclick = async () => render(await api(`/api/tasks/${t.id}`, "DELETE"));
+    li.append(del);
+
+    ul.append(li);
+  });
+
+  const done = tasks.filter((t) => t.done).length;
+  const total = tasks.length;
+  $("count").textContent = `${done} / ${total} 완료`;
+  $("bar").style.width = total ? `${(done / total) * 100}%` : "0";
+  $("cheer").textContent = total && done === total ? "오늘도 해냈어요! 대단해요 🎉" : "";
+}
+
+function showDateHeader() {
+  $("date").textContent = new Date().toLocaleDateString("ko-KR", {
+    year: "numeric", month: "long", day: "numeric", weekday: "long",
+  });
+}
+
+async function loadToday() {
+  showDateHeader();
+  render(await api("/api/tasks"));
+}
+
+$("form").onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $("input").value.trim();
+  if (!text) return;
+  try {
+    render(await api("/api/tasks", "POST", { text, remind_at: $("remindAt").value || null }));
+    $("input").value = "";
+    $("remindAt").value = "";
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+$("reroll").onclick = async () => render(await api("/api/reroll", "POST"));
+
+/* ---------- 알림 ---------- */
+function notifSupported() { return "Notification" in window; }
+
+function updateNotifStatus() {
+  const s = $("notifStatus");
+  const btn = $("enableNotif");
+  s.className = "status";
+  if (!notifSupported()) {
+    s.textContent = "이 브라우저는 알림을 지원하지 않아요";
+    s.classList.add("bad");
+    btn.style.display = "none";
+  } else if (Notification.permission === "granted") {
+    s.textContent = "알림이 켜져 있어요 ✓";
+    s.classList.add("ok");
+    btn.style.display = "none";
+  } else if (Notification.permission === "denied") {
+    s.textContent = "알림이 차단돼 있어요. 브라우저 주소창의 사이트 설정에서 허용해주세요";
+    s.classList.add("bad");
+    btn.style.display = "none";
+  } else {
+    s.textContent = "아직 알림이 허용되지 않았어요";
+    s.classList.add("bad");
+    btn.style.display = "";
+  }
+}
+
+$("enableNotif").onclick = async () => {
+  if (!notifSupported()) return;
+  await Notification.requestPermission();
+  updateNotifStatus();
+  if (Notification.permission === "granted") {
+    new Notification("알림이 켜졌어요 🔔", { body: "정해둔 시간에 알려드릴게요." });
+  }
+};
+
+$("morningTime").onchange = async (e) => {
+  if (!e.target.value) return;
+  try {
+    settings = await api("/api/settings", "POST", { morning_time: e.target.value });
+  } catch (err) {
+    alert(err.message);
+    e.target.value = settings.morning_time;
+  }
+};
+
+// 이미 울린 알림은 다시 울리지 않도록 오늘 날짜 기준으로 기억해요
+function notifiedSet() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("notified") || "{}");
+    return raw.day === currentDay ? new Set(raw.keys) : new Set();
+  } catch (_) { return new Set(); }
+}
+function markNotified(key) {
+  const s = notifiedSet();
+  s.add(key);
+  try { localStorage.setItem("notified", JSON.stringify({ day: currentDay, keys: [...s] })); } catch (_) {}
+}
+
+const toMin = (hhmm) => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
+
+function fire(title, body, tag) {
+  try { new Notification(title, { body, tag }); } catch (_) {}
+}
+
+function tick() {
+  // 자정이 지나 날짜가 바뀌면 새 하루로 넘어가요
+  if (todayStr() !== currentDay) {
+    currentDay = todayStr();
+    loadToday();
+    return;
+  }
+  if (!notifSupported() || Notification.permission !== "granted") return;
+
+  const now = new Date().getHours() * 60 + new Date().getMinutes();
+  const sent = notifiedSet();
+
+  // 추천 플랜: 아침 시간 이후 2시간 안에 한 번만
+  const pending = tasks.filter((t) => t.source === "suggested" && !t.done);
+  const morning = toMin(settings.morning_time);
+  if (pending.length && now >= morning && now - morning <= 120 && !sent.has("morning")) {
+    fire("좋은 아침이에요 ☀️", "오늘의 하찮은 플랜: " + pending.map((t) => t.text).join(", "), "morning");
+    markNotified("morning");
+  }
+
+  // 직접 추가한 할 일: 정한 시간 이후 10분 안에 한 번만
+  tasks.forEach((t) => {
+    if (t.source !== "custom" || !t.remind_at || t.done || sent.has(t.id)) return;
+    const at = toMin(t.remind_at);
+    if (now >= at && now - at <= 10) {
+      fire(`⏰ ${t.text}`, "지금 할 시간이에요!", t.id);
+      markNotified(t.id);
+    }
+  });
+}
+
+/* ---------- 캘린더 ---------- */
+const calMonth = new Date();
+calMonth.setDate(1);
+let selectedDay = null;
+
+async function renderCalendar() {
+  const y = calMonth.getFullYear();
+  const m = calMonth.getMonth();
+  const key = `${y}-${pad(m + 1)}`;
+  $("calTitle").textContent = `${y}년 ${m + 1}월`;
+
+  let hist = {};
+  try { hist = await api(`/api/history?month=${key}`); } catch (_) {}
+
+  const grid = $("calGrid");
+  grid.innerHTML = "";
+  ["일", "월", "화", "수", "목", "금", "토"].forEach((d) => {
+    const el = document.createElement("div");
+    el.className = "dow";
+    el.textContent = d;
+    grid.append(el);
+  });
+
+  const firstDow = new Date(y, m, 1).getDay();
+  const lastDate = new Date(y, m + 1, 0).getDate();
+  for (let i = 0; i < firstDow; i++) {
+    const el = document.createElement("div");
+    el.className = "cell empty";
+    grid.append(el);
+  }
+
+  for (let d = 1; d <= lastDate; d++) {
+    const ds = `${key}-${pad(d)}`;
+    const info = hist[ds];
+    const cell = document.createElement("button");
+    cell.className = "cell";
+    if (ds === todayStr()) cell.classList.add("today");
+    if (ds === selectedDay) cell.classList.add("selected");
+    if (info && info.total > 0 && info.done === info.total) cell.classList.add("all");
+
+    const dEl = document.createElement("span");
+    dEl.className = "d";
+    dEl.textContent = d;
+    const nEl = document.createElement("span");
+    nEl.className = "n";
+    if (info && info.total > 0) {
+      nEl.textContent = info.total;
+      cell.title = `${info.done}/${info.total} 완료`;
+    } else {
+      nEl.textContent = "·";
+      nEl.classList.add("zero");
+    }
+    cell.append(dEl, nEl);
+    cell.onclick = () => showDay(ds);
+    grid.append(cell);
+  }
+}
+
+async function showDay(ds) {
+  selectedDay = ds;
+  const box = $("dayDetail");
+  box.innerHTML = "";
+  let list = [];
+  try { list = await api(`/api/day/${ds}`); } catch (_) {}
+
+  const [y, m, d] = ds.split("-").map(Number);
+  const h = document.createElement("h2");
+  const done = list.filter((t) => t.done).length;
+  h.textContent = `${m}월 ${d}일` + (list.length ? ` · ${done}/${list.length} 완료` : "");
+  box.append(h);
+
+  if (!list.length) {
+    const p = document.createElement("div");
+    p.className = "empty-msg";
+    p.textContent = "이 날은 기록이 없어요";
+    box.append(p);
+  } else {
+    const ul = document.createElement("ul");
+    list.forEach((t) => {
+      const li = document.createElement("li");
+      li.className = "readonly" + (t.done ? " done" : "");
+      const mark = document.createElement("span");
+      mark.className = "mark";
+      mark.textContent = t.done ? "✓" : "○";
+      const text = document.createElement("span");
+      text.className = "text";
+      text.textContent = t.text;
+      li.append(mark, text);
+      if (t.source === "suggested") {
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = "추천";
+        li.append(tag);
+      } else if (t.remind_at) {
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = `⏰ ${t.remind_at}`;
+        li.append(tag);
+      }
+      ul.append(li);
+    });
+    box.append(ul);
+  }
+  renderCalendar();
+}
+
+$("prevMonth").onclick = () => { calMonth.setMonth(calMonth.getMonth() - 1); renderCalendar(); };
+$("nextMonth").onclick = () => { calMonth.setMonth(calMonth.getMonth() + 1); renderCalendar(); };
+
+/* ---------- 탭 ---------- */
+document.querySelectorAll(".tab").forEach((btn) => {
+  btn.onclick = () => {
+    document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${btn.dataset.tab}`));
+    if (btn.dataset.tab === "cal") {
+      renderCalendar();
+      if (!selectedDay) showDay(todayStr());
+    } else {
+      loadToday();
+    }
+  };
+});
+
+/* ---------- 시작 ---------- */
+(async function init() {
+  try { settings = await api("/api/settings"); } catch (_) {}
+  $("morningTime").value = settings.morning_time;
+  updateNotifStatus();
+  try { await loadToday(); } catch (err) { alert(err.message); }
+  tick();
+  setInterval(tick, 15000);
+
+  // 브라우저가 저장 공간이 부족할 때 기록을 지우지 않도록 요청해요
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (_) {}
+
+  // 인터넷이 없어도 앱이 열리도록 파일을 폰에 보관해요
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
