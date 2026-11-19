@@ -157,6 +157,32 @@
   .btn.ghost:hover { color: var(--accent); border-color: var(--accent); }
   .cheer { text-align: center; margin-top: 18px; color: var(--accent); min-height: 1.4em; }
 
+  /* 추천을 다 끝냈을 때 뜨는 확인창 */
+  dialog.more {
+    border: none;
+    border-radius: 20px;
+    padding: 24px 20px 18px;
+    width: min(320px, calc(100vw - 32px));
+    background: var(--card);
+    color: var(--ink);
+    text-align: center;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, .25);
+  }
+  dialog.more::backdrop { background: rgba(0, 0, 0, .35); }
+  dialog.more .big { font-size: 2.2rem; line-height: 1; margin-bottom: 10px; }
+  dialog.more h2 { font-size: 1.1rem; margin: 0 0 6px; }
+  dialog.more p { color: var(--muted); font-size: 0.9rem; margin: 0 0 18px; line-height: 1.5; }
+  dialog.more .actions { display: grid; gap: 8px; }
+  dialog.more .later {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.9rem;
+    padding: 8px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
   /* 알림 설정 */
   details.settings {
     margin-top: 20px;
@@ -291,6 +317,16 @@
     <div class="day-detail" id="dayDetail"></div>
   </section>
 </main>
+
+<dialog class="more" id="moreDialog">
+  <div class="big">🎉</div>
+  <h2 id="moreTitle">추천 플랜을 다 해냈어요!</h2>
+  <p>기분 좋은 김에 하나 더 해볼까요?</p>
+  <div class="actions">
+    <button class="btn" id="moreYes" type="button">좋아요, 하나 더!</button>
+    <button class="later" id="moreNo" type="button">오늘은 여기까지</button>
+  </div>
+</dialog>
 
 <script src="plans.js"></script>
 <script>
@@ -445,6 +481,16 @@ async function api(path, method = "GET", body) {
     saveStore(s);
     return tasksOf(s, today);
   }
+  if (route === "/api/more" && method === "POST") {
+    // 추천을 다 끝낸 사람에게 플랜을 하나 더 줘요 (오늘 아직 안 나온 묶음을 먼저 골라요)
+    const today = ensureToday(s);
+    const todays = s.tasks.filter((t) => t.day === today);
+    const exclude = new Set(todays.map((t) => t.text));
+    const usedCats = new Set(todays.filter((t) => t.source === "suggested" && t.cat).map((t) => t.cat));
+    suggest(s, 1, exclude, usedCats).forEach((p) => insertTask(s, today, p.text, "suggested", null, p.cat));
+    saveStore(s);
+    return tasksOf(s, today);
+  }
   if (route === "/api/reroll" && method === "POST") {
     // 아직 안 한 추천 항목만 새로운 걸로 바꿔줘요
     const today = ensureToday(s);
@@ -568,7 +614,16 @@ function render(list) {
     check.className = "check";
     check.textContent = t.done ? "✓" : "";
     check.setAttribute("aria-label", "완료 토글");
-    check.onclick = async () => render(await api(`/api/tasks/${t.id}/toggle`, "POST"));
+    check.onclick = async () => {
+      const list = await api(`/api/tasks/${t.id}/toggle`, "POST");
+      render(list);
+      // 방금 끝낸 게 추천 플랜이고, 오늘 추천을 전부 끝냈으면 하나 더 받을지 물어봐요
+      const justDone = list.find((x) => x.id === t.id);
+      const suggested = list.filter((x) => x.source === "suggested");
+      if (justDone && justDone.done && justDone.source === "suggested" && suggested.every((x) => x.done)) {
+        askForMore(suggested.length);
+      }
+    };
 
     const text = document.createElement("span");
     text.className = "text";
@@ -629,6 +684,33 @@ $("form").onsubmit = async (e) => {
 };
 
 $("reroll").onclick = async () => render(await api("/api/reroll", "POST"));
+
+/* ---------- 하나 더 받기 ---------- */
+function askForMore(doneCount) {
+  const dlg = $("moreDialog");
+  $("moreTitle").textContent = doneCount > DAILY_COUNT
+    ? `추천 플랜 ${doneCount}개를 다 해냈어요!`
+    : "추천 플랜을 다 해냈어요!";
+  if (typeof dlg.showModal === "function") {
+    if (!dlg.open) dlg.showModal();
+  } else if (confirm("추천 플랜을 다 해냈어요! 하나 더 해볼까요?")) {
+    giveOneMore();
+  }
+}
+
+async function giveOneMore() {
+  try {
+    render(await api("/api/more", "POST"));
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+$("moreYes").onclick = async () => {
+  $("moreDialog").close();
+  await giveOneMore();
+};
+$("moreNo").onclick = () => $("moreDialog").close();
 
 /* ---------- 알림 ---------- */
 function notifSupported() { return "Notification" in window; }
