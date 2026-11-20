@@ -194,6 +194,23 @@
     font-family: inherit;
   }
 
+  /* 공유 미리보기 창 */
+  dialog.share { padding: 18px 16px 14px; width: min(360px, calc(100vw - 24px)); }
+  dialog.share h2 { margin-bottom: 12px; }
+  dialog.share img {
+    display: block;
+    width: 100%;
+    max-height: 56vh;
+    object-fit: contain;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    margin-bottom: 14px;
+    -webkit-touch-callout: default;
+  }
+  dialog.share .note { margin-top: 6px; }
+  .share-btn { margin-top: 10px; }
+
   /* 알림 설정 */
   details.settings {
     margin-top: 20px;
@@ -282,6 +299,7 @@
     <button class="btn ghost" id="reroll">🎲 안 한 추천은 다른 걸로 바꾸기</button>
     <div class="cheer" id="cheer"></div>
     <button class="btn ghost" id="moreBtn" type="button" hidden>🎁 플랜 하나 더 받기</button>
+    <button class="btn ghost share-btn" id="shareToday" type="button">📤 오늘 플랜 공유하기</button>
 
     <details class="settings" id="settings">
       <summary>🔔 알림 설정</summary>
@@ -328,6 +346,7 @@
     </div>
     <div class="cal-grid" id="calGrid"></div>
     <div class="legend">칸의 숫자는 그날 완료한 개수 / 전체 개수예요 (직접 추가한 할 일 포함). 초록색 칸은 전부 해낸 날! 날짜를 누르면 자세히 볼 수 있어요.</div>
+    <button class="btn ghost share-btn" id="shareCal" type="button">📤 이 달 캘린더 공유하기</button>
     <div class="day-detail" id="dayDetail"></div>
   </section>
 
@@ -342,6 +361,16 @@
     <button class="btn" id="moreYes" type="button">좋아요, 하나 더!</button>
     <button class="later" id="moreNo" type="button">오늘은 여기까지</button>
   </div>
+</dialog>
+
+<dialog class="more share" id="shareDialog">
+  <h2 id="shareTitle">공유하기</h2>
+  <img id="shareImg" alt="공유할 이미지 미리보기">
+  <div class="actions">
+    <button class="btn" id="shareGo" type="button">📤 공유하기</button>
+    <button class="later" id="shareClose" type="button">닫기</button>
+  </div>
+  <div class="note" id="shareHint"></div>
 </dialog>
 
 <script src="plans.js"></script>
@@ -363,7 +392,7 @@ const CATS = window.PLAN_POOL || [];
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
 // 고친 뒤 올릴 때 sw.js의 CACHE 버전과 같이 올려주세요. 앱 맨 아래에 보여요.
-const APP_VERSION = "v6";
+const APP_VERSION = "v7";
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -985,5 +1014,6 @@ document.addEventListener("touchmove", (e) => {
   }
 })();
 </script>
+<script src="share.js"></script>
 </body>
 </html>

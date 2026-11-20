@@ -1,10 +1,11 @@
 // 인터넷이 없어도 앱이 열리도록 앱 파일을 폰에 보관해요.
 // 앱을 고친 뒤 다시 올릴 때는 아래 버전 숫자를 하나 올려주세요. 그래야 폰이 새 파일을 받아요.
-const CACHE = "trivial-plan-v6";
+const CACHE = "trivial-plan-v7";
 const FILES = [
   "./",
   "./index.html",
   "./plans.js",
+  "./share.js",
   "./manifest.webmanifest",
   "./apple-touch-icon.png",
   "./icon-192.png",
