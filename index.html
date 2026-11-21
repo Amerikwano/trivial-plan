@@ -345,7 +345,7 @@
       <button id="nextMonth" aria-label="다음 달">›</button>
     </div>
     <div class="cal-grid" id="calGrid"></div>
-    <div class="legend">칸의 숫자는 그날 완료한 개수 / 전체 개수예요 (직접 추가한 할 일 포함). 초록색 칸은 전부 해낸 날! 날짜를 누르면 자세히 볼 수 있어요.</div>
+    <div class="legend">칸의 숫자는 그날 완료한 개수 / 전체 개수예요 (직접 추가한 할 일 포함). 초록색 칸은 전부 해낸 날! 날짜를 누르면 그날 할 일을 보고 추가할 수 있어요.</div>
     <button class="btn ghost share-btn" id="shareCal" type="button">📤 이 달 캘린더 공유하기</button>
     <div class="day-detail" id="dayDetail"></div>
   </section>
@@ -392,7 +392,7 @@ const CATS = window.PLAN_POOL || [];
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
 // 고친 뒤 올릴 때 sw.js의 CACHE 버전과 같이 올려주세요. 앱 맨 아래에 보여요.
-const APP_VERSION = "v7";
+const APP_VERSION = "v9";
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -505,28 +505,35 @@ async function api(path, method = "GET", body) {
     return tasksOf(s, today);
   }
   if (route === "/api/tasks" && method === "POST") {
+    // day를 주면 그 날짜에 (캘린더에서 미리 등록), 없으면 오늘에 넣어요
     const text = ((body && body.text) || "").trim();
     if (!text) throw new Error("내용을 입력해주세요");
     const remindAt = ((body && body.remind_at) || "").trim() || null;
     if (remindAt && !TIME_RE.test(remindAt)) throw new Error("알림 시간 형식이 올바르지 않아요");
     const today = ensureToday(s);
-    insertTask(s, today, text.slice(0, 100), "custom", remindAt);
+    const day = (body && body.day) || today;
+    if (!DATE_RE.test(day)) throw new Error("날짜 형식이 올바르지 않아요");
+    insertTask(s, day, text.slice(0, 100), "custom", remindAt);
     saveStore(s);
-    return tasksOf(s, today);
+    return tasksOf(s, day);
   }
   if ((m = route.match(/^\/api\/tasks\/(\d+)\/toggle$/)) && method === "POST") {
-    const today = ensureToday(s);
-    const t = s.tasks.find((x) => x.id === Number(m[1]) && x.day === today);
+    // 어느 날짜의 할 일이든 완료를 켜고 꺼요. 그 날짜의 목록을 돌려줘요.
+    ensureToday(s);
+    const t = s.tasks.find((x) => x.id === Number(m[1]));
     if (!t) throw new Error("없는 할 일이에요");
     t.done = !t.done;
     saveStore(s);
-    return tasksOf(s, today);
+    return tasksOf(s, t.day);
   }
   if ((m = route.match(/^\/api\/tasks\/(\d+)$/)) && method === "DELETE") {
+    // 어느 날짜의 할 일이든 지워요. 그 날짜의 목록을 돌려줘요.
     const today = ensureToday(s);
-    s.tasks = s.tasks.filter((x) => !(x.id === Number(m[1]) && x.day === today));
+    const t = s.tasks.find((x) => x.id === Number(m[1]));
+    const day = t ? t.day : today;
+    s.tasks = s.tasks.filter((x) => x.id !== Number(m[1]));
     saveStore(s);
-    return tasksOf(s, today);
+    return tasksOf(s, day);
   }
   if (route === "/api/more" && method === "POST") {
     // 추천을 다 끝낸 사람에게 플랜을 하나 더 줘요 (오늘 아직 안 나온 묶음을 먼저 골라요)
@@ -929,28 +936,41 @@ async function showDay(ds) {
   try { list = await api(`/api/day/${ds}`); } catch (_) {}
 
   const [y, m, d] = ds.split("-").map(Number);
+  const today = todayStr();
+  const label = ds === today ? " (오늘)" : ds > today ? " (예정)" : "";
   const h = document.createElement("h2");
   const done = list.filter((t) => t.done).length;
-  h.textContent = `${m}월 ${d}일` + (list.length ? ` · ${done}/${list.length} 완료` : "");
+  h.textContent = `${m}월 ${d}일${label}` + (list.length ? ` · ${done}/${list.length} 완료` : "");
   box.append(h);
+
+  // 고른 날짜의 할 일: 일반 할 일 목록처럼 체크·삭제할 수 있어요
+  const afterChange = async () => {
+    await showDay(ds);
+    if (ds === today) render(await api("/api/tasks"));   // 오늘 탭도 같이 맞춰요
+  };
 
   if (!list.length) {
     const p = document.createElement("div");
     p.className = "empty-msg";
-    p.textContent = "이 날은 기록이 없어요";
+    p.textContent = "이 날은 아직 할 일이 없어요";
     box.append(p);
   } else {
     const ul = document.createElement("ul");
     list.forEach((t) => {
       const li = document.createElement("li");
-      li.className = "readonly" + (t.done ? " done" : "");
-      const mark = document.createElement("span");
-      mark.className = "mark";
-      mark.textContent = t.done ? "✓" : "○";
+      if (t.done) li.classList.add("done");
+
+      const check = document.createElement("button");
+      check.className = "check";
+      check.textContent = t.done ? "✓" : "";
+      check.setAttribute("aria-label", "완료 토글");
+      check.onclick = async () => { await api(`/api/tasks/${t.id}/toggle`, "POST"); await afterChange(); };
+
       const text = document.createElement("span");
       text.className = "text";
       text.textContent = t.text;
-      li.append(mark, text);
+      li.append(check, text);
+
       if (t.source === "suggested") {
         const tag = document.createElement("span");
         tag.className = "tag";
@@ -962,10 +982,58 @@ async function showDay(ds) {
         tag.textContent = `⏰ ${t.remind_at}`;
         li.append(tag);
       }
+
+      const del = document.createElement("button");
+      del.className = "del";
+      del.textContent = "×";
+      del.setAttribute("aria-label", "삭제");
+      del.onclick = async () => { await api(`/api/tasks/${t.id}`, "DELETE"); await afterChange(); };
+      li.append(del);
+
       ul.append(li);
     });
     box.append(ul);
   }
+
+  // 이 날짜에 할 일 추가 (지난 날짜에는 알림 시간을 고를 수 없어요)
+  const form = document.createElement("form");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.maxLength = 100;
+  input.autocomplete = "off";
+  input.placeholder = `${m}월 ${d}일에 할 일 추가하기`;
+  const row = document.createElement("div");
+  row.className = "row";
+  let time = null;
+  if (ds >= today) {
+    const lab = document.createElement("label");
+    lab.textContent = "⏰ 알림 시간";
+    time = document.createElement("input");
+    time.type = "time";
+    lab.htmlFor = time.id = "dayRemindAt";
+    row.append(lab, time);
+  }
+  const spacer = document.createElement("span");
+  spacer.className = "spacer";
+  const add = document.createElement("button");
+  add.className = "btn";
+  add.type = "submit";
+  add.textContent = "추가";
+  row.append(spacer, add);
+  form.append(input, row);
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    try {
+      await api("/api/tasks", "POST", { text, day: ds, remind_at: (time && time.value) || null });
+      await afterChange();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+  box.append(form);
+
   renderCalendar();
 }
 
