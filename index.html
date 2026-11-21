@@ -500,7 +500,7 @@ const CATS = window.PLAN_POOL || [];
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
 // 고친 뒤 올릴 때 sw.js의 CACHE 버전과 같이 올려주세요. 앱 맨 아래에 보여요.
-const APP_VERSION = "v13";
+const APP_VERSION = "v14";
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -826,7 +826,7 @@ function askRemindTime(t, isNew = false) {
   const dlg = $("remindDialog");
   $("remindTitle").textContent = isNew ? "알림을 설정할까요?" : "알림 시간";
   $("remindTask").textContent = t.text;
-  setPickedTime(t.remind_at || nextHour());
+  setPickedTime(t.remind_at || nowTime());
   $("remindSave").textContent = isNew ? "알림 설정하고 저장" : "저장";
   $("remindClear").textContent = isNew ? "알림 없이 저장" : "알림 없애기";
   $("remindClear").hidden = !isNew && !t.remind_at;
@@ -852,9 +852,10 @@ function setPickedTime(hhmm) {
 }
 const pickedTime = () => `${$("remindHour").value}:${$("remindMin").value}`;
 
-/** 지금부터 다음 정각 (예: 14:20 → "15:00") — 알림 창의 기본 시간이에요 */
-function nextHour() {
-  return `${pad((new Date().getHours() + 1) % 24)}:00`;
+/** 지금 시각 (예: "14:20") — 알림 창을 열면 이 시간부터 보여줘요 */
+function nowTime() {
+  const d = new Date();
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function render(list) {
