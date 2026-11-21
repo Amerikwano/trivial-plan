@@ -353,8 +353,6 @@
     <form id="form">
       <input type="text" id="input" placeholder="나만의 할 일 추가하기" maxlength="100" autocomplete="off">
       <div class="row">
-        <label for="remindAt">⏰ 알림 시간</label>
-        <input type="time" id="remindAt">
         <span class="spacer"></span>
         <button class="btn" type="submit">추가</button>
       </div>
@@ -490,7 +488,7 @@ const CATS = window.PLAN_POOL || [];
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
 // 고친 뒤 올릴 때 sw.js의 CACHE 버전과 같이 올려주세요. 앱 맨 아래에 보여요.
-const APP_VERSION = "v11";
+const APP_VERSION = "v12";
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -584,7 +582,9 @@ function ensureToday(s) {
 }
 
 const tasksOf = (s, day) =>
-  s.tasks.filter((t) => t.day === day).map(({ id, day, text, done, source, remind_at, cat }) => ({ id, day, text, done, source, remind_at, cat: cat || null }));
+  s.tasks.filter((t) => t.day === day)
+    .sort((a, b) => (a.source === "suggested" ? 0 : 1) - (b.source === "suggested" ? 0 : 1))
+    .map(({ id, day, text, done, source, remind_at, cat }) => ({ id, day, text, done, source, remind_at, cat: cat || null }));
 
 // 추천 태그에는 묶음 그림만 보여줘요 (예: "🔍")
 function suggestLabel(t) {
@@ -660,10 +660,16 @@ async function api(path, method = "GET", body) {
     const todays = s.tasks.filter((t) => t.day === today);
     const exclude = new Set(todays.map((t) => t.text));
     const keptCats = new Set(todays.filter((t) => t.source === "suggested" && t.done && t.cat).map((t) => t.cat));
-    const before = s.tasks.length;
-    s.tasks = s.tasks.filter((t) => !(t.day === today && t.source === "suggested" && !t.done));
-    suggest(s, before - s.tasks.length, exclude, keptCats)
-      .forEach((p) => insertTask(s, today, p.text, "suggested", null, p.cat));
+    const slots = s.tasks.filter((t) => t.day === today && t.source === "suggested" && !t.done);
+    const picks = suggest(s, slots.length, exclude, keptCats);
+    // 안 한 추천만 같은 자리에서 새 추천으로 바꿔요 (순서가 그대로 유지돼요)
+    let i = 0;
+    s.tasks = s.tasks.flatMap((t) => {
+      if (!(t.day === today && t.source === "suggested" && !t.done)) return [t];
+      const p = picks[i++];
+      if (!p) return [];
+      return [{ id: s.nextId++, day: today, text: p.text, done: false, source: "suggested", remind_at: null, cat: p.cat }];
+    });
     saveStore(s);
     return tasksOf(s, today);
   }
@@ -800,12 +806,18 @@ function taskTag(t, onChanged) {
   return btn;
 }
 
-/** 알림 시간 바꾸기 창. 새 시간("HH:MM"), 지우기(null), 취소(undefined)를 돌려줘요. */
-function askRemindTime(t) {
+/**
+ * 알림 시간 창. 새 시간("HH:MM"), 알림 없음(null), 취소(undefined)를 돌려줘요.
+ * isNew: 새 할 일을 추가할 때 (알림을 설정할지, 필요 없는지 물어봐요)
+ */
+function askRemindTime(t, isNew = false) {
   const dlg = $("remindDialog");
+  $("remindTitle").textContent = isNew ? "알림을 설정할까요?" : "알림 시간";
   $("remindTask").textContent = t.text;
-  $("remindInput").value = t.remind_at || "09:00";
-  $("remindClear").hidden = !t.remind_at;
+  $("remindInput").value = t.remind_at || nextHour();
+  $("remindSave").textContent = isNew ? "알림 설정하고 저장" : "저장";
+  $("remindClear").textContent = isNew ? "알림 없이 저장" : "알림 없애기";
+  $("remindClear").hidden = !isNew && !t.remind_at;
   return new Promise((resolve) => {
     const done = (v) => { dlg.close(); resolve(v); };
     $("remindSave").onclick = () => done($("remindInput").value || null);
@@ -814,6 +826,11 @@ function askRemindTime(t) {
     dlg.oncancel = (e) => { e.preventDefault(); done(undefined); };
     dlg.showModal();
   });
+}
+
+/** 지금부터 다음 정각 (예: 14:20 → "15:00") — 알림 창의 기본 시간이에요 */
+function nextHour() {
+  return `${pad((new Date().getHours() + 1) % 24)}:00`;
 }
 
 function render(list) {
@@ -914,10 +931,11 @@ $("form").onsubmit = async (e) => {
   e.preventDefault();
   const text = $("input").value.trim();
   if (!text) return;
+  const remindAt = await askRemindTime({ text, remind_at: null }, true);
+  if (remindAt === undefined) return;   // 취소하면 입력한 글은 그대로 둬요
   try {
-    render(await api("/api/tasks", "POST", { text, remind_at: $("remindAt").value || null }));
+    render(await api("/api/tasks", "POST", { text, remind_at: remindAt }));
     $("input").value = "";
-    $("remindAt").value = "";
   } catch (err) {
     alert(err.message);
   }
@@ -1171,7 +1189,7 @@ async function showDay(ds) {
     box.append(ul);
   }
 
-  // 이 날짜에 할 일 추가 (지난 날짜에는 알림 시간을 고를 수 없어요)
+  // 이 날짜에 할 일 추가 (오늘·앞으로의 날짜는 추가할 때 알림을 물어봐요)
   const form = document.createElement("form");
   const input = document.createElement("input");
   input.type = "text";
@@ -1180,15 +1198,6 @@ async function showDay(ds) {
   input.placeholder = `${m}월 ${d}일에 할 일 추가하기`;
   const row = document.createElement("div");
   row.className = "row";
-  let time = null;
-  if (ds >= today) {
-    const lab = document.createElement("label");
-    lab.textContent = "⏰ 알림 시간";
-    time = document.createElement("input");
-    time.type = "time";
-    lab.htmlFor = time.id = "dayRemindAt";
-    row.append(lab, time);
-  }
   const spacer = document.createElement("span");
   spacer.className = "spacer";
   const add = document.createElement("button");
@@ -1201,8 +1210,13 @@ async function showDay(ds) {
     e.preventDefault();
     const text = input.value.trim();
     if (!text) return;
+    let remindAt = null;
+    if (ds >= today) {
+      remindAt = await askRemindTime({ text, remind_at: null }, true);
+      if (remindAt === undefined) return;   // 취소
+    }
     try {
-      await api("/api/tasks", "POST", { text, day: ds, remind_at: (time && time.value) || null });
+      await api("/api/tasks", "POST", { text, day: ds, remind_at: remindAt });
       await afterChange();
     } catch (err) {
       alert(err.message);
