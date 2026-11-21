@@ -85,7 +85,7 @@
     ops.push((ctx) => {
       ctx.fillStyle = t.ink;
       ctx.font = `700 22px ${FONT}`;
-      ctx.fillText("오늘의 하찮은 플랜 🌱", PAD, headY + 20);
+      ctx.fillText(`오늘의 하찮은 플랜 ${$("growth").textContent}`, PAD, headY + 20);
       ctx.fillStyle = t.muted;
       ctx.font = `400 13px ${FONT}`;
       ctx.fillText(new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" }), PAD, headY + 42);

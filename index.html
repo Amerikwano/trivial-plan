@@ -209,17 +209,66 @@
     -webkit-touch-callout: default;
   }
   dialog.share .note { margin-top: 6px; }
-  .share-btn { margin-top: 10px; }
+  /* 공유 버튼 (아이콘만, 화면 맨 아래) */
+  .share-row { display: flex; justify-content: center; margin-top: 22px; }
+  .share-icon {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  .share-icon:hover { border-color: var(--accent); }
 
-  /* 알림 설정 */
-  details.settings {
-    margin-top: 20px;
+  /* 왼쪽 위 ☰ 메뉴 */
+  .top { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .top h1 { margin: 0; }
+  .menu-btn {
+    flex: none;
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  .date { margin-left: 50px; }
+  dialog.drawer {
+    margin: 0;
+    height: 100%; max-height: 100%;
+    width: min(340px, 86vw);
+    border: none;
+    border-radius: 0 20px 20px 0;
+    padding: 20px 16px;
+    background: var(--bg);
+    color: var(--ink);
+    box-shadow: 8px 0 40px rgba(0, 0, 0, .25);
+    overflow-y: auto;
+  }
+  dialog.drawer[open] { animation: drawer-in .2s ease-out; }
+  @keyframes drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+  dialog.drawer::backdrop { background: rgba(0, 0, 0, .35); }
+  .drawer-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .drawer-head h2 { margin: 0; font-size: 1.15rem; }
+  .drawer-close {
+    border: none; background: transparent; color: var(--muted);
+    font-size: 26px; line-height: 1; cursor: pointer; padding: 4px 8px;
+  }
+  .panel {
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 14px;
-    padding: 12px 14px;
+    padding: 14px;
+    margin-bottom: 14px;
   }
-  details.settings summary { cursor: pointer; font-size: 0.95rem; }
+  .panel h3 { margin: 0; font-size: 0.95rem; }
+  .panel .row { flex-wrap: wrap; row-gap: 8px; }
+  .panel .row label { white-space: normal; }
   .settings .body { display: grid; gap: 12px; margin-top: 14px; }
   .note { color: var(--muted); font-size: 0.8rem; line-height: 1.5; }
   .status { font-size: 0.85rem; }
@@ -271,7 +320,15 @@
 </head>
 <body>
 <main>
-  <h1>오늘의 하찮은 플랜 🌱</h1>
+  <div class="top">
+    <button class="menu-btn" id="menuBtn" type="button" aria-label="메뉴 열기" aria-haspopup="dialog">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+        <path d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    </button>
+    <!-- 이번 달 완료 개수에 따라 🌱 → 🌸 → 🍎 로 자라요 -->
+    <h1>오늘의 하찮은 플랜 <span id="growth" title="">🌱</span></h1>
+  </div>
   <div class="date" id="date"></div>
 
   <div class="tabs">
@@ -299,10 +356,48 @@
     <button class="btn ghost" id="reroll">🎲 안 한 추천은 다른 걸로 바꾸기</button>
     <div class="cheer" id="cheer"></div>
     <button class="btn ghost" id="moreBtn" type="button" hidden>🎁 플랜 하나 더 받기</button>
-    <button class="btn ghost share-btn" id="shareToday" type="button">📤 오늘 플랜 공유하기</button>
 
-    <details class="settings" id="settings">
-      <summary>🔔 알림 설정</summary>
+    <div class="share-row">
+      <button class="share-icon" id="shareToday" type="button" aria-label="오늘 플랜 공유하기" title="공유하기">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>
+        </svg>
+      </button>
+    </div>
+  </section>
+
+  <!-- 캘린더 -->
+  <section class="view" id="view-cal">
+    <div class="cal-head">
+      <button id="prevMonth" aria-label="이전 달">‹</button>
+      <div class="title" id="calTitle"></div>
+      <button id="nextMonth" aria-label="다음 달">›</button>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="legend">칸의 숫자는 그날 완료한 개수 / 전체 개수예요 (직접 추가한 할 일 포함). 초록색 칸은 전부 해낸 날! 날짜를 누르면 그날 할 일을 보고 추가할 수 있어요.</div>
+    <div class="day-detail" id="dayDetail"></div>
+
+    <div class="share-row">
+      <button class="share-icon" id="shareCal" type="button" aria-label="이 달 캘린더 공유하기" title="공유하기">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>
+        </svg>
+      </button>
+    </div>
+  </section>
+
+  <div class="version" id="version"></div>
+</main>
+
+<!-- ☰ 메뉴: 알림 설정과 기록 백업 -->
+<dialog class="drawer" id="drawer" aria-label="메뉴">
+  <div class="drawer-head">
+    <h2>메뉴</h2>
+    <button class="drawer-close" id="drawerClose" type="button" aria-label="메뉴 닫기">×</button>
+  </div>
+
+    <section class="panel settings" id="settings">
+      <h3>🔔 알림 설정</h3>
       <div class="body">
         <div class="row">
           <button class="btn small" id="enableNotif" type="button">알림 허용하기</button>
@@ -318,10 +413,10 @@
           아이폰은 홈 화면에 추가한 앱에서만 알림을 켤 수 있어요.
         </div>
       </div>
-    </details>
+    </section>
 
-    <details class="settings" id="backup">
-      <summary>💾 기록 백업</summary>
+    <section class="panel settings" id="backup">
+      <h3>💾 기록 백업</h3>
       <div class="body">
         <div class="note">
           기록은 이 폰 안에만 저장돼요. 폰을 바꾸거나 앱을 지우기 전에 백업 파일을 내보내 두고,
@@ -334,24 +429,8 @@
         </div>
         <span class="status" id="backupStatus"></span>
       </div>
-    </details>
-  </section>
-
-  <!-- 캘린더 -->
-  <section class="view" id="view-cal">
-    <div class="cal-head">
-      <button id="prevMonth" aria-label="이전 달">‹</button>
-      <div class="title" id="calTitle"></div>
-      <button id="nextMonth" aria-label="다음 달">›</button>
-    </div>
-    <div class="cal-grid" id="calGrid"></div>
-    <div class="legend">칸의 숫자는 그날 완료한 개수 / 전체 개수예요 (직접 추가한 할 일 포함). 초록색 칸은 전부 해낸 날! 날짜를 누르면 그날 할 일을 보고 추가할 수 있어요.</div>
-    <button class="btn ghost share-btn" id="shareCal" type="button">📤 이 달 캘린더 공유하기</button>
-    <div class="day-detail" id="dayDetail"></div>
-  </section>
-
-  <div class="version" id="version"></div>
-</main>
+    </section>
+</dialog>
 
 <dialog class="more" id="moreDialog">
   <div class="big">🎉</div>
@@ -392,7 +471,7 @@ const CATS = window.PLAN_POOL || [];
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
 // 고친 뒤 올릴 때 sw.js의 CACHE 버전과 같이 올려주세요. 앱 맨 아래에 보여요.
-const APP_VERSION = "v9";
+const APP_VERSION = "v10";
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -715,7 +794,38 @@ function render(list) {
   // 추천을 전부 끝냈으면 '하나 더 받기' 버튼도 보여줘요 (확인창을 닫았을 때를 위해)
   const suggested = tasks.filter((t) => t.source === "suggested");
   $("moreBtn").hidden = !(suggested.length && suggested.every((t) => t.done));
+
+  updateGrowth();
 }
+
+/* ---------- 제목 옆 식물: 이번 달 완료 개수만큼 자라요 ----------
+   0~30개 🌱 새싹 → 31~60개 🌸 꽃 → 61개 이상 🍎 열매 */
+function growthEmoji(doneThisMonth) {
+  if (doneThisMonth >= 61) return "🍎";
+  if (doneThisMonth >= 31) return "🌸";
+  return "🌱";
+}
+
+function updateGrowth() {
+  const month = todayStr().slice(0, 7);
+  const n = loadStore().tasks.filter((t) => t.done && t.day.startsWith(month + "-")).length;
+  const el = $("growth");
+  el.textContent = growthEmoji(n);
+  el.title = `이번 달 완료 ${n}개`;
+  el.setAttribute("aria-label", `이번 달 완료 ${n}개`);
+}
+
+/* ---------- ☰ 메뉴 ---------- */
+$("menuBtn").onclick = () => {
+  const d = $("drawer");
+  if (typeof d.showModal === "function") d.showModal();
+  else d.setAttribute("open", "");
+};
+$("drawerClose").onclick = () => $("drawer").close();
+// 메뉴 바깥(어두운 부분)을 누르면 닫혀요
+$("drawer").addEventListener("click", (e) => {
+  if (e.target === $("drawer")) $("drawer").close();
+});
 
 function showDateHeader() {
   $("date").textContent = new Date().toLocaleDateString("ko-KR", {
@@ -872,6 +982,7 @@ calMonth.setDate(1);
 let selectedDay = null;
 
 async function renderCalendar() {
+  updateGrowth();   // 캘린더에서 다른 날짜를 체크해도 제목 옆 식물이 맞춰져요
   const y = calMonth.getFullYear();
   const m = calMonth.getMonth();
   const key = `${y}-${pad(m + 1)}`;
