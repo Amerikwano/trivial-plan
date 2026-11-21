@@ -213,7 +213,15 @@
   .tag-btn { border: none; cursor: pointer; font-family: inherit; line-height: 1.5; }
   .tag-btn:hover { filter: brightness(0.96); }
   .tag-btn.empty { opacity: .55; }
-  .remind-input { display: block; margin: 0 auto 16px; font-size: 1.2rem; }
+  /* 알림 시간: 시·분 숫자 고르기 (시계 모양 대신) */
+  .time-pick { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 auto 16px; }
+  .time-pick select {
+    font-size: 1.5rem; font-weight: 700; font-family: inherit;
+    padding: 8px 14px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--accent-soft); color: var(--ink);
+    text-align: center; text-align-last: center; appearance: none; -webkit-appearance: none;
+  }
+  .time-pick span { font-size: 1.5rem; font-weight: 700; }
   #remindTask { word-break: break-word; }
 
   /* 공유 버튼 (아이콘만, 화면 맨 아래) */
@@ -441,7 +449,11 @@
   <div class="big">⏰</div>
   <h2 id="remindTitle">알림 시간</h2>
   <p id="remindTask"></p>
-  <input type="time" id="remindInput" class="remind-input">
+  <div class="time-pick">
+    <select id="remindHour" aria-label="시"></select>
+    <span>:</span>
+    <select id="remindMin" aria-label="분"></select>
+  </div>
   <div class="actions">
     <button class="btn" id="remindSave" type="button">저장</button>
     <button class="later" id="remindClear" type="button">알림 없애기</button>
@@ -488,7 +500,7 @@ const CATS = window.PLAN_POOL || [];
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
 // 고친 뒤 올릴 때 sw.js의 CACHE 버전과 같이 올려주세요. 앱 맨 아래에 보여요.
-const APP_VERSION = "v12";
+const APP_VERSION = "v13";
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -814,19 +826,31 @@ function askRemindTime(t, isNew = false) {
   const dlg = $("remindDialog");
   $("remindTitle").textContent = isNew ? "알림을 설정할까요?" : "알림 시간";
   $("remindTask").textContent = t.text;
-  $("remindInput").value = t.remind_at || nextHour();
+  setPickedTime(t.remind_at || nextHour());
   $("remindSave").textContent = isNew ? "알림 설정하고 저장" : "저장";
   $("remindClear").textContent = isNew ? "알림 없이 저장" : "알림 없애기";
   $("remindClear").hidden = !isNew && !t.remind_at;
   return new Promise((resolve) => {
     const done = (v) => { dlg.close(); resolve(v); };
-    $("remindSave").onclick = () => done($("remindInput").value || null);
+    $("remindSave").onclick = () => done(pickedTime());
     $("remindClear").onclick = () => done(null);
     $("remindCancel").onclick = () => done(undefined);
     dlg.oncancel = (e) => { e.preventDefault(); done(undefined); };
     dlg.showModal();
   });
 }
+
+/* 시(00~23)·분(00~59) 숫자 목록을 한 번만 만들어 둬요 */
+(function fillTimePick() {
+  for (let h = 0; h < 24; h++) $("remindHour").add(new Option(pad(h), pad(h)));
+  for (let m = 0; m < 60; m++) $("remindMin").add(new Option(pad(m), pad(m)));
+})();
+function setPickedTime(hhmm) {
+  const [h, m] = hhmm.split(":");
+  $("remindHour").value = h;
+  $("remindMin").value = m;
+}
+const pickedTime = () => `${$("remindHour").value}:${$("remindMin").value}`;
 
 /** 지금부터 다음 정각 (예: 14:20 → "15:00") — 알림 창의 기본 시간이에요 */
 function nextHour() {
