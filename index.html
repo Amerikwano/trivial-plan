@@ -532,7 +532,7 @@ const CATS = window.PLAN_POOL || [];
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
 // 고친 뒤 올릴 때 sw.js의 CACHE 버전과 같이 올려주세요. 앱 맨 아래에 보여요.
-const APP_VERSION = "v19";
+const APP_VERSION = "v20";
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -1069,6 +1069,8 @@ function askForMore(doneCount) {
 async function giveOneMore() {
   try {
     render(await api("/api/more", "POST"));
+    // 캘린더에서 받았으면 캘린더 목록도 맞춰요
+    if (selectedDay && $("view-cal").classList.contains("active")) await showDay(selectedDay);
   } catch (err) {
     alert(err.message);
   }
@@ -1283,7 +1285,18 @@ async function showDay(ds) {
         check.classList.add("locked");
         check.setAttribute("aria-label", t.done ? "완료함 (바꿀 수 없어요)" : "안 함 (바꿀 수 없어요)");
       } else {
-        check.onclick = async () => { await api(`/api/tasks/${t.id}/toggle`, "POST"); await afterChange(); };
+        check.onclick = async () => {
+          const after = await api(`/api/tasks/${t.id}/toggle`, "POST");
+          await afterChange();
+          // 오늘 추천을 캘린더에서 전부 끝내도 하나 더 받을지 물어봐요 (오늘 탭과 똑같이)
+          if (ds === today) {
+            const justDone = after.find((x) => x.id === t.id);
+            const suggested = after.filter((x) => x.source === "suggested");
+            if (justDone && justDone.done && justDone.source === "suggested" && suggested.every((x) => x.done)) {
+              askForMore(suggested.length);
+            }
+          }
+        };
       }
 
       const text = document.createElement("span");
