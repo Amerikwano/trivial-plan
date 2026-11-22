@@ -105,6 +105,10 @@
     padding: 0;
   }
   li.done button.check { background: var(--done); border-color: var(--done); }
+  /* 지난 날짜: 체크 칸을 흐리게, 누를 수 없어요 */
+  li button.check.locked { opacity: .4; cursor: default; border-color: var(--muted); }
+  li.done button.check.locked { border-color: var(--done); }
+  .past-note { color: var(--muted); font-size: .85rem; margin: 10px 2px 0; }
   li .text { flex: 1; word-break: break-word; }
   li.done .text { color: var(--muted); text-decoration: line-through; }
   .tag {
@@ -528,7 +532,7 @@ const CATS = window.PLAN_POOL || [];
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
 // 고친 뒤 올릴 때 sw.js의 CACHE 버전과 같이 올려주세요. 앱 맨 아래에 보여요.
-const APP_VERSION = "v18";
+const APP_VERSION = "v19";
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -1247,6 +1251,7 @@ async function showDay(ds) {
   const [y, m, d] = ds.split("-").map(Number);
   const today = todayStr();
   const label = ds === today ? " (오늘)" : ds > today ? " (예정)" : "";
+  const isPast = ds < today;   // 지난 날짜는 보기만 해요 (체크·삭제·추가 안 돼요)
   const h = document.createElement("h2");
   const done = list.filter((t) => t.done).length;
   h.textContent = `${m}월 ${d}일${label}` + (list.length ? ` · ${done}/${list.length} 완료` : "");
@@ -1273,16 +1278,23 @@ async function showDay(ds) {
       check.className = "check";
       check.textContent = t.done ? "✓" : "";
       check.setAttribute("aria-label", "완료 토글");
-      check.onclick = async () => { await api(`/api/tasks/${t.id}/toggle`, "POST"); await afterChange(); };
+      if (isPast) {
+        check.disabled = true;
+        check.classList.add("locked");
+        check.setAttribute("aria-label", t.done ? "완료함 (바꿀 수 없어요)" : "안 함 (바꿀 수 없어요)");
+      } else {
+        check.onclick = async () => { await api(`/api/tasks/${t.id}/toggle`, "POST"); await afterChange(); };
+      }
 
       const text = document.createElement("span");
       text.className = "text";
       text.textContent = t.text;
       li.append(check, text);
 
-      const tag = taskTag(t, afterChange);
+      const tag = taskTag(t, isPast ? null : afterChange);
       if (tag) li.append(tag);
 
+      if (isPast) { ul.append(li); return; }
       const del = document.createElement("button");
       del.className = "del";
       del.textContent = "×";
@@ -1295,7 +1307,16 @@ async function showDay(ds) {
     box.append(ul);
   }
 
-  // 이 날짜에 할 일 추가 (오늘·앞으로의 날짜는 추가할 때 알림을 물어봐요)
+  if (isPast) {
+    const p = document.createElement("p");
+    p.className = "note past-note";
+    p.textContent = "지난 날은 기록만 볼 수 있어요";
+    box.append(p);
+    renderCalendar();
+    return;
+  }
+
+  // 이 날짜에 할 일 추가 (추가할 때 알림을 물어봐요)
   const form = document.createElement("form");
   const input = document.createElement("input");
   input.type = "text";
@@ -1316,11 +1337,8 @@ async function showDay(ds) {
     e.preventDefault();
     const text = input.value.trim();
     if (!text) return;
-    let remindAt = null;
-    if (ds >= today) {
-      remindAt = await askRemindTime({ text, remind_at: null }, true);
-      if (remindAt === undefined) return;   // 취소
-    }
+    const remindAt = await askRemindTime({ text, remind_at: null }, true);
+    if (remindAt === undefined) return;   // 취소
     try {
       await api("/api/tasks", "POST", { text, day: ds, remind_at: remindAt });
       await afterChange();
