@@ -220,23 +220,27 @@
     border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer;
   }
   .time-pick .tf.on { border: 2px solid var(--accent); background: var(--accent-soft); }
-  /* 옆으로 미는 동그란 숫자 줄: 가운데 온 숫자가 골라져요 */
-  .time-panel { margin: -4px 0 14px; }
+  /* 처음 만들었던 숫자 바퀴 모양 (3줄): 위아래로 밀면 가운데 띠의 숫자가 골라져요 */
+  .time-pick { align-items: flex-start; }
+  .time-pick > span { line-height: 56px; }
+  .tcol { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .wheel { position: relative; width: 76px; height: 126px; }
+  .wheel::before {
+    content: ""; position: absolute; left: 0; right: 0; top: 42px; height: 42px;
+    border-radius: 10px; background: var(--accent-soft); pointer-events: none;
+  }
   .strip {
-    display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
-    height: 48px; align-items: center; -webkit-overflow-scrolling: touch;
-    mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
+    position: relative; height: 126px; overflow-y: auto; scroll-snap-type: y mandatory;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
   }
   .strip::-webkit-scrollbar { display: none; }
-  .strip .pad { flex: 0 0 calc(50% - 23px); }
-  .strip .sc { flex: 0 0 46px; display: flex; justify-content: center; scroll-snap-align: center; }
-  .strip .bub {
-    width: 34px; height: 34px; border-radius: 50%; border: none; padding: 0; cursor: pointer;
-    font-family: inherit; font-size: 0.88rem; font-weight: 500;
-    background: var(--accent-soft); color: var(--ink); transition: all .12s ease;
+  .strip .pad { height: 42px; }
+  .strip .sc {
+    height: 42px; display: flex; align-items: center; justify-content: center; scroll-snap-align: center;
+    font-size: 1.15rem; color: var(--muted); cursor: pointer; opacity: .45; user-select: none;
   }
-  .strip .bub.on { width: 40px; height: 40px; background: var(--accent); color: #fff; font-weight: 700; font-size: 1rem; }
+  .strip .sc.near { opacity: 1; }
+  .strip .sc.on { font-size: 1.45rem; font-weight: 700; color: var(--ink); opacity: 1; }
   .time-pick span { font-size: 1.5rem; font-weight: 700; }
   .time-hint { color: var(--muted); font-size: 0.8rem; margin: -8px 0 14px !important; }
   #remindTask { word-break: break-word; }
@@ -467,11 +471,16 @@
   <h2 id="remindTitle">알림 시간</h2>
   <p id="remindTask"></p>
   <div class="time-pick">
-    <button class="tf" id="remindHour" type="button" aria-label="시, 눌러서 바꾸기">00</button>
+    <div class="tcol">
+      <button class="tf" id="remindHour" type="button" aria-label="시, 눌러서 바꾸기">00</button>
+      <div id="hourSlot"></div>
+    </div>
     <span>:</span>
-    <button class="tf" id="remindMin" type="button" aria-label="분, 눌러서 바꾸기">00</button>
+    <div class="tcol">
+      <button class="tf" id="remindMin" type="button" aria-label="분, 눌러서 바꾸기">00</button>
+      <div id="minSlot"></div>
+    </div>
   </div>
-  <div class="time-panel" id="timePanel" hidden></div>
   <p class="time-hint" id="timeHint">시간이나 분을 눌러서 바꿔요</p>
   <div class="actions">
     <button class="btn" id="remindSave" type="button">저장</button>
@@ -519,7 +528,7 @@ const CATS = window.PLAN_POOL || [];
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
 // 고친 뒤 올릴 때 sw.js의 CACHE 버전과 같이 올려주세요. 앱 맨 아래에 보여요.
-const APP_VERSION = "v17";
+const APP_VERSION = "v18";
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -859,9 +868,9 @@ function askRemindTime(t, isNew = false) {
   });
 }
 
-/* 시·분 고르기: 칸을 누르면 동그란 숫자 줄이 나와요. 옆으로 밀면 가운데 숫자가 골라지고, 숫자를 눌러도 돼요. */
+/* 시·분 고르기: 칸을 누르면 그 칸 아래에 숫자 바퀴(3줄)가 나와요. 위아래로 밀면 가운데 숫자가 골라지고, 숫자를 눌러도 돼요. */
 const pick = { h: 9, m: 0, open: null };
-const CELL_W = 46;
+const ROW_H = 42;
 function setPickedTime(hhmm) {
   const [h, m] = hhmm.split(":").map(Number);
   pick.h = h; pick.m = m;
@@ -878,9 +887,8 @@ function openTimePart(part) {
   showPickedBoxes();
   $("remindHour").classList.toggle("on", part === "h");
   $("remindMin").classList.toggle("on", part === "m");
-  const panel = $("timePanel");
-  panel.innerHTML = "";
-  panel.hidden = !part;
+  $("hourSlot").innerHTML = "";
+  $("minSlot").innerHTML = "";
   $("timeHint").hidden = !!part;
   if (!part) return;
 
@@ -888,39 +896,38 @@ function openTimePart(part) {
   const cur = part === "h" ? pick.h : pick.m;
   const strip = document.createElement("div");
   strip.className = "strip";
-  strip.setAttribute("aria-label", part === "h" ? "시, 옆으로 밀어서 바꾸기" : "분, 옆으로 밀어서 바꾸기");
+  strip.setAttribute("aria-label", part === "h" ? "시, 위아래로 밀어서 바꾸기" : "분, 위아래로 밀어서 바꾸기");
   const padL = document.createElement("div"); padL.className = "pad";
   const padR = document.createElement("div"); padR.className = "pad";
   strip.append(padL);
   const bubs = [];
   for (let i = 0; i < count; i++) {
-    const cell = document.createElement("div");
-    cell.className = "sc";
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "bub";
+    const b = document.createElement("div");
+    b.className = "sc";
     b.textContent = pad(i);
+    b.setAttribute("role", "button");
     b.setAttribute("aria-label", `${i}${part === "h" ? "시" : "분"}`);
-    b.onclick = () => strip.scrollTo({ left: i * CELL_W, behavior: "smooth" });
-    cell.append(b);
-    strip.append(cell);
+    b.onclick = () => strip.scrollTo({ top: i * ROW_H, behavior: "smooth" });
+    strip.append(b);
     bubs.push(b);
   }
   strip.append(padR);
-  panel.append(strip);
+  const wheel = document.createElement("div");
+  wheel.className = "wheel";
+  wheel.append(strip);
+  $(part === "h" ? "hourSlot" : "minSlot").append(wheel);
 
   let shown = -1;
   const sync = () => {
-    const i = Math.max(0, Math.min(count - 1, Math.round(strip.scrollLeft / CELL_W)));
+    const i = Math.max(0, Math.min(count - 1, Math.round(strip.scrollTop / ROW_H)));
     if (i === shown) return;
-    if (shown >= 0) bubs[shown].classList.remove("on");
-    bubs[i].classList.add("on");
+    bubs.forEach((b, k) => { b.classList.toggle("on", k === i); b.classList.toggle("near", Math.abs(k - i) === 1); });
     shown = i;
     if (part === "h") pick.h = i; else pick.m = i;
     showPickedBoxes();
   };
   strip.addEventListener("scroll", () => requestAnimationFrame(sync), { passive: true });
-  strip.scrollLeft = cur * CELL_W;
+  strip.scrollTop = cur * ROW_H;
   sync();
 }
 $("remindHour").onclick = () => openTimePart(pick.open === "h" ? null : "h");
