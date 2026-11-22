@@ -220,17 +220,23 @@
     border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer;
   }
   .time-pick .tf.on { border: 2px solid var(--accent); background: var(--accent-soft); }
-  /* 동글동글한 시·분 버튼 */
-  .time-panel { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: -4px 0 14px; }
-  .time-panel .grid { display: grid; grid-template-columns: repeat(6, 38px); gap: 6px; }
-  .time-panel .row2 { display: flex; gap: 8px; }
-  .bub {
-    border: none; font-family: inherit; cursor: pointer; color: var(--ink);
-    background: var(--accent-soft); font-weight: 500;
+  /* 옆으로 미는 동그란 숫자 줄: 가운데 온 숫자가 골라져요 */
+  .time-panel { margin: -4px 0 14px; }
+  .strip {
+    display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+    height: 48px; align-items: center; -webkit-overflow-scrolling: touch;
+    mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
   }
-  .bub.on { background: var(--accent); color: #fff; font-weight: 700; }
-  .grid .bub { width: 38px; height: 38px; border-radius: 50%; font-size: 0.95rem; padding: 0; }
-  .row2 .bub { height: 32px; border-radius: 16px; padding: 0 14px; font-size: 0.82rem; }
+  .strip::-webkit-scrollbar { display: none; }
+  .strip .pad { flex: 0 0 calc(50% - 23px); }
+  .strip .sc { flex: 0 0 46px; display: flex; justify-content: center; scroll-snap-align: center; }
+  .strip .bub {
+    width: 34px; height: 34px; border-radius: 50%; border: none; padding: 0; cursor: pointer;
+    font-family: inherit; font-size: 0.88rem; font-weight: 500;
+    background: var(--accent-soft); color: var(--ink); transition: all .12s ease;
+  }
+  .strip .bub.on { width: 40px; height: 40px; background: var(--accent); color: #fff; font-weight: 700; font-size: 1rem; }
   .time-pick span { font-size: 1.5rem; font-weight: 700; }
   .time-hint { color: var(--muted); font-size: 0.8rem; margin: -8px 0 14px !important; }
   #remindTask { word-break: break-word; }
@@ -513,7 +519,7 @@ const CATS = window.PLAN_POOL || [];
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
 // 고친 뒤 올릴 때 sw.js의 CACHE 버전과 같이 올려주세요. 앱 맨 아래에 보여요.
-const APP_VERSION = "v16";
+const APP_VERSION = "v17";
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -853,30 +859,23 @@ function askRemindTime(t, isNew = false) {
   });
 }
 
-/* 시·분 고르기: 칸을 누르면 동글동글한 버튼이 나와요.
-   시 → ☀️오전/🌙오후 + 12·1…11시 (고르면 바로 분으로), 분 → 5분 단위 + 1분씩 조절 (고르면 닫혀요) */
-const pick = { h: 9, m: 0, open: null, pm: false };
+/* 시·분 고르기: 칸을 누르면 동그란 숫자 줄이 나와요. 옆으로 밀면 가운데 숫자가 골라지고, 숫자를 눌러도 돼요. */
+const pick = { h: 9, m: 0, open: null };
+const CELL_W = 46;
 function setPickedTime(hhmm) {
   const [h, m] = hhmm.split(":").map(Number);
-  pick.h = h; pick.m = m; pick.pm = h >= 12;
+  pick.h = h; pick.m = m;
   openTimePart(null);
 }
 const pickedTime = () => `${pad(pick.h)}:${pad(pick.m)}`;
 
-function bubble(text, on, onClick, label) {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.className = "bub" + (on ? " on" : "");
-  b.textContent = text;
-  b.setAttribute("aria-pressed", on ? "true" : "false");
-  if (label) b.setAttribute("aria-label", label);
-  b.onclick = onClick;
-  return b;
+function showPickedBoxes() {
+  $("remindHour").textContent = pad(pick.h);
+  $("remindMin").textContent = pad(pick.m);
 }
 function openTimePart(part) {
   pick.open = part;
-  $("remindHour").textContent = pad(pick.h);
-  $("remindMin").textContent = pad(pick.m);
+  showPickedBoxes();
   $("remindHour").classList.toggle("on", part === "h");
   $("remindMin").classList.toggle("on", part === "m");
   const panel = $("timePanel");
@@ -884,30 +883,45 @@ function openTimePart(part) {
   panel.hidden = !part;
   $("timeHint").hidden = !!part;
   if (!part) return;
-  const grid = document.createElement("div");
-  grid.className = "grid";
-  const row = document.createElement("div");
-  row.className = "row2";
-  if (part === "h") {
-    row.append(
-      bubble("☀️ 오전", !pick.pm, () => { pick.pm = false; openTimePart("h"); }),
-      bubble("🌙 오후", pick.pm, () => { pick.pm = true; openTimePart("h"); }),
-    );
-    for (let i = 0; i < 12; i++) {
-      const h = pick.pm ? i + 12 : i;
-      grid.append(bubble(String(i === 0 ? 12 : i), h === pick.h, () => { pick.h = h; openTimePart("m"); }, `${h}시`));
-    }
-    panel.append(row, grid);
-  } else {
-    for (let m = 0; m < 60; m += 5) {
-      grid.append(bubble(pad(m), m === pick.m, () => { pick.m = m; openTimePart(null); }, `${m}분`));
-    }
-    row.append(
-      bubble("− 1분", false, () => { pick.m = (pick.m + 59) % 60; openTimePart("m"); }),
-      bubble("+ 1분", false, () => { pick.m = (pick.m + 1) % 60; openTimePart("m"); }),
-    );
-    panel.append(grid, row);
+
+  const count = part === "h" ? 24 : 60;
+  const cur = part === "h" ? pick.h : pick.m;
+  const strip = document.createElement("div");
+  strip.className = "strip";
+  strip.setAttribute("aria-label", part === "h" ? "시, 옆으로 밀어서 바꾸기" : "분, 옆으로 밀어서 바꾸기");
+  const padL = document.createElement("div"); padL.className = "pad";
+  const padR = document.createElement("div"); padR.className = "pad";
+  strip.append(padL);
+  const bubs = [];
+  for (let i = 0; i < count; i++) {
+    const cell = document.createElement("div");
+    cell.className = "sc";
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "bub";
+    b.textContent = pad(i);
+    b.setAttribute("aria-label", `${i}${part === "h" ? "시" : "분"}`);
+    b.onclick = () => strip.scrollTo({ left: i * CELL_W, behavior: "smooth" });
+    cell.append(b);
+    strip.append(cell);
+    bubs.push(b);
   }
+  strip.append(padR);
+  panel.append(strip);
+
+  let shown = -1;
+  const sync = () => {
+    const i = Math.max(0, Math.min(count - 1, Math.round(strip.scrollLeft / CELL_W)));
+    if (i === shown) return;
+    if (shown >= 0) bubs[shown].classList.remove("on");
+    bubs[i].classList.add("on");
+    shown = i;
+    if (part === "h") pick.h = i; else pick.m = i;
+    showPickedBoxes();
+  };
+  strip.addEventListener("scroll", () => requestAnimationFrame(sync), { passive: true });
+  strip.scrollLeft = cur * CELL_W;
+  sync();
 }
 $("remindHour").onclick = () => openTimePart(pick.open === "h" ? null : "h");
 $("remindMin").onclick = () => openTimePart(pick.open === "m" ? null : "m");
