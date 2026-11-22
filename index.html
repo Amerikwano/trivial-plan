@@ -49,7 +49,7 @@
   /* 아이폰은 글자가 16px보다 작은 입력칸을 누르면 화면을 확대해요. 그래서 16px로 맞춰요 */
   input, select, textarea { font-size: 16px !important; }
   /* 화면이 좌우로 밀리지 않게 고정해요 (위아래 스크롤만) */
-  html, body { overflow-x: hidden; overscroll-behavior-x: none; max-width: 100%; }
+  html, body { overflow-x: clip; overscroll-behavior-x: none; max-width: 100%; }   /* hidden이면 위 고정(sticky)이 풀려서 clip을 써요 */
   body { touch-action: pan-y; }
   li .text { min-width: 0; overflow-wrap: anywhere; }
   body {
@@ -60,14 +60,20 @@
     font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
     display: flex;
     justify-content: center;
-    padding: 32px 16px;
+    padding: 0 16px 32px;   /* 위 여백은 고정된 머리 부분(.pinned)이 가져가요 */
   }
   main { width: 100%; max-width: 460px; }
   h1 { font-size: 1.5rem; margin: 0 0 4px; }
   .date { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; }
 
   /* 탭 */
-  .tabs { display: flex; gap: 6px; margin-bottom: 20px; }
+  .tabs { display: flex; gap: 6px; }
+  .pinned {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--bg);
+    padding: calc(32px + env(safe-area-inset-top)) 16px 14px;
+    margin: 0 -16px 6px;   /* 화면 양 끝까지 덮어서 아래 내용이 비치지 않게 */
+  }
   .tab {
     flex: 1;
     padding: 10px;
@@ -364,6 +370,8 @@
 </head>
 <body>
 <main>
+  <!-- 제목·날짜·탭은 위에 고정하고, 탭 아래만 스크롤돼요 -->
+  <header class="pinned">
   <div class="top">
     <button class="menu-btn" id="menuBtn" type="button" aria-label="메뉴 열기" aria-haspopup="dialog">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
@@ -379,6 +387,7 @@
     <button class="tab active" data-tab="today">오늘</button>
     <button class="tab" data-tab="cal">캘린더</button>
   </div>
+  </header>
 
   <!-- 오늘 -->
   <section class="view active" id="view-today">
@@ -536,7 +545,7 @@ const CATS = window.PLAN_POOL || [];
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
 // 고친 뒤 올릴 때 sw.js의 CACHE 버전과 같이 올려주세요. 앱 맨 아래에 보여요.
-const APP_VERSION = "v21";
+const APP_VERSION = "v22";
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -1376,6 +1385,7 @@ document.querySelectorAll(".tab").forEach((btn) => {
   btn.onclick = () => {
     document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
     document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${btn.dataset.tab}`));
+    window.scrollTo(0, 0);   // 탭을 바꾸면 맨 위부터 보여줘요
     if (btn.dataset.tab === "cal") {
       // 오늘 탭에서 추가·체크·삭제한 것도 보이도록 고른 날짜 목록까지 다시 그려요 (showDay가 달력도 그려요)
       showDay(selectedDay || todayStr());
