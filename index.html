@@ -48,6 +48,10 @@
   }
   /* 아이폰은 글자가 16px보다 작은 입력칸을 누르면 화면을 확대해요. 그래서 16px로 맞춰요 */
   input, select, textarea { font-size: 16px !important; }
+  /* 화면이 좌우로 밀리지 않게 고정해요 (위아래 스크롤만) */
+  html, body { overflow-x: hidden; overscroll-behavior-x: none; max-width: 100%; }
+  body { touch-action: pan-y; }
+  li .text { min-width: 0; overflow-wrap: anywhere; }
   body {
     margin: 0;
     min-height: 100vh;
@@ -532,7 +536,7 @@ const CATS = window.PLAN_POOL || [];
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const DAILY_COUNT = 3;
 // 고친 뒤 올릴 때 sw.js의 CACHE 버전과 같이 올려주세요. 앱 맨 아래에 보여요.
-const APP_VERSION = "v20";
+const APP_VERSION = "v21";
 const STORE_KEY = "trivial-plan-v1";
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
